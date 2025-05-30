@@ -2,6 +2,8 @@ import discord
 import requests
 import os
 import matplotlib.pyplot as plt
+import pandas as pd
+import mplfinance as mpf
 import datetime
 from dotenv import load_dotenv
 
@@ -127,6 +129,72 @@ class MyClient(discord.Client):
                 await message.channel.send(file=discord.File(filename))
 
                 # Hapus file setelah dikirim
+                os.remove(filename)
+
+            except Exception as e:
+                await message.channel.send(f"Terjadi error: {str(e)}")
+
+        if message.content.startswith('!candle'):
+            parts = message.content.split(' ')
+            if len(parts) < 2:
+                await message.channel.send("Format salah. Contoh: `!candle bitcoin`")
+                return
+
+            coin = parts[1].lower()
+            days = 30  # Ambil data 30 hari terakhir
+
+            # Ambil data OHLC dari CoinGecko
+            url = f"https://api.coingecko.com/api/v3/coins/{coin}/ohlc?vs_currency=usd&days=30"
+
+            response = requests.get(url)
+            if response.status_code != 200:
+                await message.channel.send("Gagal ambil data. Pastikan nama coin valid.")
+                return
+
+            try:
+                raw_data = response.json()
+                if not raw_data:
+                    await message.channel.send("Data tidak ditemukan.")
+                    return
+
+                # Format data jadi DataFrame
+                df = pd.DataFrame(raw_data, columns=["timestamp", "open", "high", "low", "close"])
+                df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
+                df.set_index("Date", inplace=True)
+                df = df[["open", "high", "low", "close"]]
+
+                # Tambahkan indikator Moving Average (MA20) dan RSI
+                df['MA20'] = df['close'].rolling(window=20).mean()
+
+                # RSI
+                delta = df['close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                rs = gain / loss
+                df['RSI'] = 100 - (100 / (1 + rs))
+
+                # Buat dua panel: candlestick + RSI
+                apds = [
+                    mpf.make_addplot(df['MA20'], color='blue', width=1.2),
+                    mpf.make_addplot(df['RSI'], panel=1, color='purple', ylabel='RSI')
+                ]
+
+                filename = f"{coin}_candle.png"
+                mpf.plot(
+                    df,
+                    type='candle',
+                    style='yahoo',
+                    title=f'{coin.capitalize()} - Candlestick 30 Hari Terakhir',
+                    ylabel='Harga (USD)',
+                    addplot=apds,
+                    volume=False,
+                    panel_ratios=(3, 1),
+                    figratio=(12, 6),
+                    figscale=1.2,
+                    savefig=filename
+                )
+
+                await message.channel.send(file=discord.File(filename))
                 os.remove(filename)
 
             except Exception as e:
