@@ -1,6 +1,8 @@
 import discord
 import requests
 import os
+import matplotlib.pyplot as plt
+import datetime
 from dotenv import load_dotenv
 
 intents = discord.Intents.default()
@@ -84,7 +86,50 @@ class MyClient(discord.Client):
             except KeyError:
                 await message.channel.send("Data tidak lengkap atau coin tidak ditemukan.")
 
+        if message.content.startswith('!chart'):
+            parts = message.content.split(' ')
+            if len(parts) < 2:
+                await message.channel.send("Format salah. Contoh: `!chart bitcoin`")
+                return
 
-    
+            coin = parts[1].lower()
+            url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart"
+            params = {"vs_currency": "usd", "days": "7"}
+
+            try:
+                response = requests.get(url, params=params)
+                data = response.json()
+
+                if "prices" not in data:
+                    await message.channel.send("Data tidak ditemukan. Pastikan nama coin valid, contoh: `!chart bitcoin`")
+                    return
+
+                # Ambil data harga dan waktu
+                prices = data["prices"]
+                timestamps = [datetime.datetime.fromtimestamp(p[0] / 1000) for p in prices]
+                values = [p[1] for p in prices]
+
+                # Buat grafik
+                plt.figure(figsize=(10, 4))
+                plt.plot(timestamps, values, marker='o', color='blue', linewidth=2)
+                plt.title(f"Harga {coin.capitalize()} 7 Hari Terakhir")
+                plt.xlabel("Tanggal")
+                plt.ylabel("Harga (USD)")
+                plt.grid(True)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+
+                filename = f"{coin}_chart.png"
+                plt.savefig(filename)
+                plt.close()
+
+                # Kirim ke Discord
+                await message.channel.send(file=discord.File(filename))
+
+                # Hapus file setelah dikirim
+                os.remove(filename)
+
+            except Exception as e:
+                await message.channel.send(f"Terjadi error: {str(e)}")
 
 client.run(TOKEN)
