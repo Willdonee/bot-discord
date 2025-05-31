@@ -200,4 +200,19 @@ class MyClient(discord.Client):
             except Exception as e:
                 await message.channel.send(f"Terjadi error: {str(e)}")
 
+        if message.content.startswith('!help'):
+            help_message = """
+            **Daftar Perintah Bot:**
+
+            1. `!say <teks>` - Mengirimkan pesan yang Anda ketikkan. Contoh: `!say Halo, dunia!`
+            2. `!price <coin>` - Menampilkan harga terkini dari cryptocurrency. Contoh: `!price bitcoin`
+            3. `!stats <coin>` - Menampilkan statistik lengkap tentang cryptocurrency, termasuk harga, market cap, volume, dan perubahan 24 jam. Contoh: `!stats ethereum`
+            4. `!chart <coin>` - Menampilkan grafik harga cryptocurrency selama 7 hari terakhir. Contoh: `!chart bitcoin`
+            5. `!candle <coin>` - Menampilkan grafik candlestick cryptocurrency dengan indikator Moving Average dan RSI untuk 30 hari terakhir. Contoh: `!candle bitcoin`
+
+            **Catatan:** Pastikan nama koin yang Anda masukkan benar, dan jika ada kesalahan format, bot akan memberi tahu Anda.
+            """
+
+            await message.channel.send(help_message)
+
 client.run(TOKEN)
