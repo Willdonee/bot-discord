@@ -1,3 +1,4 @@
+import asyncio
 import discord
 import requests
 import os
@@ -32,10 +33,44 @@ def get_coin_data_from_cache_or_api(url, params=None):
         return data
     return None
 
+    # Fungsi untuk memuat data alert harga dari file JSON
+def load_alerts():
+    if os.path.exists('alerts.json'):
+        with open('alerts.json', 'r') as f:
+            return json.load(f)
+    return {}
+
+# Fungsi untuk menyimpan data alert harga ke file JSON
+def save_alerts(alerts):
+    with open('alerts.json', 'w') as f:
+        json.dump(alerts, f)
+
+# Cek harga cryptocurrency dan bandingkan dengan alert yang diset
+async def check_alerts():
+    alerts = load_alerts()
+    for coin, alert_info in alerts.items():
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
+        data = get_coin_data_from_cache_or_api(url)
+        
+        if data and coin in data:
+            current_price = data[coin]['usd']
+            if current_price >= alert_info['price']:
+                # Kirim pemberitahuan ke channel atau user
+                channel = client.get_channel(alert_info['channel_id'])
+                if channel:
+                    await channel.send(f"🚨 **ALERT**: Harga {coin} sudah mencapai ${current_price}! (Target: ${alert_info['price']})")
+                # Hapus alert setelah diberitahukan
+                del alerts[coin]
+                save_alerts(alerts)
+
 class MyClient(discord.Client):
     @client.event
     async def on_ready():
         print(f'Bot berhasil login sebagai {client.user}')
+
+        while True:
+            await check_alerts()
+            await asyncio.sleep(60)
 
     @client.event
     async def on_message(message):
@@ -221,4 +256,53 @@ class MyClient(discord.Client):
 
             await message.channel.send(help_message)
 
+        if message.content.startswith('!alert set'):
+            parts = message.content.split(' ')
+            if len(parts) < 3:
+                await message.channel.send("Format salah. Contoh: `!alert set bitcoin 50000`")
+                return
+
+            coin = parts[2].lower()
+            try:
+                target_price = float(parts[3])
+            except ValueError:
+                await message.channel.send("Harga harus berupa angka. Contoh: `!alert set bitcoin 50000`")
+                return
+
+            alerts = load_alerts()
+            alerts[coin] = {
+                "price": target_price,
+                "channel_id": message.channel.id,
+                "created_at": str(datetime.datetime.now())
+            }
+            save_alerts(alerts)
+            await message.channel.send(f"Alert harga untuk {coin} sudah diset pada ${target_price}.")
+
+        elif message.content.startswith('!alert list'):
+            alerts = load_alerts()
+            if not alerts:
+                await message.channel.send("Tidak ada alert harga yang diset.")
+                return
+            
+            alert_list = []
+            for coin, alert_info in alerts.items():
+                alert_list.append(f"{coin.upper()} - Target: ${alert_info['price']} - Dibuat pada: {alert_info['created_at']}")
+            
+            await message.channel.send("\n".join(alert_list))
+
+        elif message.content.startswith('!alert remove'):
+            parts = message.content.split(' ')
+            if len(parts) < 3:
+                await message.channel.send("Format salah. Contoh: `!alert remove bitcoin`")
+                return
+
+            coin = parts[2].lower()
+            alerts = load_alerts()
+            if coin in alerts:
+                del alerts[coin]
+                save_alerts(alerts)
+                await message.channel.send(f"Alert untuk {coin} telah dihapus.")
+            else:
+                await message.channel.send(f"Tidak ada alert untuk {coin} yang ditemukan.")
+                
 client.run(TOKEN)
