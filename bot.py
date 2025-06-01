@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import mplfinance as mpf
 import datetime
+from cachetools import TTLCache
 from dotenv import load_dotenv
+
+cache = TTLCache(maxsize=100, ttl=60)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -13,6 +16,20 @@ client = discord.Client(intents=intents)
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+
+def get_coin_data_from_cache_or_api(url, params=None):
+    # memriksa apakah data sudah ada dalam cache
+    cache_key = (url, tuple(params.items()) if params else None)  # Membuat key cache unik
+    if cache_key in cache:
+        return cache[cache_key]
+
+    # Jika tidak ada, lakukan request API dan simpan dalam cache
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        cache[cache_key] = data  # Menyimpan data dalam cache
+        return data
+    return None
 
 class MyClient(discord.Client):
     @client.event
@@ -42,10 +59,9 @@ class MyClient(discord.Client):
             coin = parts[1].lower()
             url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
 
-            response = requests.get(url)
-            data = response.json()
+            data = get_coin_data_from_cache_or_api(url)
 
-            if coin in data:
+            if data in coin in data:
                 price = data[coin]['usd']
                 await message.channel.send(f"Harga {coin.upper()} saat ini: ${price}")
             else:
@@ -61,12 +77,7 @@ class MyClient(discord.Client):
             coin = parts[1].lower()
             url = f"https://api.coingecko.com/api/v3/coins/{coin}"
 
-            response = requests.get(url)
-            if response.status_code != 200:
-                await message.channel.send("Gagal mengambil data. Periksa nama koin kamu.")
-                return
-
-            data = response.json()
+            data = get_coin_data_from_cache_or_api(url)
             try:
                 name = data['name']
                 symbol = data['symbol'].upper()
@@ -99,8 +110,7 @@ class MyClient(discord.Client):
             params = {"vs_currency": "usd", "days": "7"}
 
             try:
-                response = requests.get(url, params=params)
-                data = response.json()
+                data = get_coin_data_from_cache_or_api(url, params)
 
                 if "prices" not in data:
                     await message.channel.send("Data tidak ditemukan. Pastikan nama coin valid, contoh: `!chart bitcoin`")
@@ -146,13 +156,8 @@ class MyClient(discord.Client):
             # Ambil data OHLC dari CoinGecko
             url = f"https://api.coingecko.com/api/v3/coins/{coin}/ohlc?vs_currency=usd&days=30"
 
-            response = requests.get(url)
-            if response.status_code != 200:
-                await message.channel.send("Gagal ambil data. Pastikan nama coin valid.")
-                return
-
             try:
-                raw_data = response.json()
+                raw_data = get_coin_data_from_cache_or_api(url)
                 if not raw_data:
                     await message.channel.send("Data tidak ditemukan.")
                     return
