@@ -1,6 +1,7 @@
 import discord
 import requests
 import os
+import json
 import matplotlib.pyplot as plt
 import pandas as pd
 import mplfinance as mpf
@@ -8,7 +9,7 @@ import datetime
 from cachetools import TTLCache
 from dotenv import load_dotenv
 
-cache = TTLCache(maxsize=100, ttl=60)
+cache = TTLCache(maxsize=100, ttl=3600)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,7 +62,7 @@ class MyClient(discord.Client):
 
             data = get_coin_data_from_cache_or_api(url)
 
-            if data in coin in data:
+            if coin in data:
                 price = data[coin]['usd']
                 await message.channel.send(f"Harga {coin.upper()} saat ini: ${price}")
             else:
