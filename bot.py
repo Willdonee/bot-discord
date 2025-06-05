@@ -63,6 +63,34 @@ async def check_alerts():
                 del alerts[coin]
                 save_alerts(alerts)
 
+# API CoinGecko untuk mendapatkan data historis
+def get_historical_data(coin='bitcoin', days=30):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days={days}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return data
+    return None
+
+# Fungsi untuk membuat grafik berdasarkan data historis
+def plot_historical_data(data, coin='bitcoin'):
+    timestamps = [datetime.datetime.fromtimestamp(x[0] / 1000) for x in data['prices']]  # Mengonversi timestamp ke tanggal
+    prices = [x[1] for x in data['prices']]  # Mendapatkan harga dari data
+
+    # Membuat grafik harga cryptocurrency
+    plt.figure(figsize=(10, 6))
+    plt.plot(timestamps, prices, label=f'Harga {coin.capitalize()}', color='blue')
+    plt.xlabel("Tanggal")
+    plt.ylabel("Harga (USD)")
+    plt.title(f"Harga {coin.capitalize()} - {len(prices)} Hari Terakhir")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    filename = f"{coin}_historical.png"
+    plt.savefig(filename)
+    plt.close()
+    return filename
+
 class MyClient(discord.Client):
     @client.event
     async def on_ready():
@@ -304,5 +332,30 @@ class MyClient(discord.Client):
                 await message.channel.send(f"Alert untuk {coin} telah dihapus.")
             else:
                 await message.channel.send(f"Tidak ada alert untuk {coin} yang ditemukan.")
+
+        # Perintah untuk mendapatkan data historis
+        if message.content.startswith('!history'):
+            # Parsing perintah dan argumen
+            parts = message.content.split(' ')
+            if len(parts) < 3:
+                await message.channel.send("Format salah. Contoh: `!history bitcoin 30`")
+                return
+
+            coin = parts[1].lower()  # Nama koin (misal: bitcoin, ethereum)
+            try:
+                days = int(parts[2])  # Rentang waktu dalam hari
+            except ValueError:
+                await message.channel.send("Rentang waktu harus berupa angka. Contoh: `!history bitcoin 30`")
+                return
+
+            # Ambil data historis dari API
+            data = get_historical_data(coin, days)
+            if data:
+                # Plot data harga
+                filename = plot_historical_data(data, coin)
+                await message.channel.send(f"Berikut adalah grafik harga {coin.capitalize()} selama {days} hari terakhir:", file=discord.File(filename))
+                os.remove(filename)  # Hapus file setelah dikirim
+            else:
+                await message.channel.send(f"Terjadi kesalahan saat mengambil data untuk {coin}.")
                 
 client.run(TOKEN)
